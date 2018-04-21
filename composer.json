@@ -1,0 +1,28 @@
+{
+	"name": "magtiny/magtiny-jwt",
+	"description": "The Magtiny Framework JWT",
+	"keywords": ["magtiny", "jwt"],
+	"license": "MIT",
+	"type": "package",
+	"authors": [
+		{
+			"name": "Clark Yanwei Zhao",
+			"email": "zhaoyanwei@shinetechchina.com",
+			"role": "Developer"
+		}
+	],
+	"require": {
+		"php": ">=7.0.0",
+		"magtiny/magtiny-framework": "dev-master"
+	},
+	"autoload": {
+		"psr-4": {
+			"magtiny\\": "src/"
+		}
+	},
+	"config": {
+		"preferred-install": "dist",
+		"sort-packages": true,
+		"optimize-autoloader": true
+	}
+}
