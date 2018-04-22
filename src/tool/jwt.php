@@ -8,8 +8,6 @@ use magtiny\framework\render;
 
 class jwt
 {
-	public static $payload = [];
-
 	public function __construct ($config = [])
 	{
 		$defaultConfig = render::config(__DIR__."/../config.php");
@@ -18,84 +16,85 @@ class jwt
 
 	private function render ($code = 1100, $success = false, $data = null)
 	{
+		$message = isset($this->config["messages"][$code]) ? $this->config["messages"][$code] : "";
 		return [
 			"success" => $success,
 			"code" => $code,
-			"message" => $this->config["messages"][$code],
+			"message" => $message,
 			"data" => $data,
 		];
 	}
 
-	private static function base64urlEncode ($data)
+	private function base64urlEncode ($data)
 	{
 		return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 	}
 
-	private static function base64urlDecode ($data)
+	private function base64urlDecode ($data)
 	{
-		return base64_decode(strtr($data, '-_', '+/').str_repeat('=', 3 - ( 3 + strlen($data)) % 4 ));
+		return base64_decode(strtr($data, '-_', '+/').str_repeat('=', 3 - (3 + strlen($data)) % 4));
 	}
 
-	private static function signature($input)
+	private function signature($input)
 	{
 		return hash_hmac($this->config["alg"], $input, $this->config["secret"]);
 	}
 
-	public function encode ($data)
+	public function encode ($data = [])
 	{
-		$header = static::base64urlEncode([
+		$header = [
 			"typ" => "JWT",
 			"alg" => $this->config["alg"]
-		]);
-		$token = [
-			"aud" => [globals::server("HTTP_HOST")],
-			"iss" => globals::server("REMOTE_ADDR"),
-			"iat" => globals::server("REQUEST_TIME"),
-            "exp" => globals::server('REQUEST_TIME') + $this->config["timeout"],
-			"sub" => globals::server("HTTP_ORIGIN"),
-			"nbf" => globals::server("REQUEST_TIME"),
-			"jti" => '1',
 		];
-		$payload = static::base64urlEncode(array_merge($token, $data));
-		$jwt = $header.".".$token;
-		$signature = static::signature($jwt);
+		$header64 = $this->base64urlEncode(json_encode($header));
+		$payload = [
+			"aud" => $this->config["aud"],
+			"iss" => $this->config["iss"],
+			"iat" => $this->config["iat"],
+            "exp" => $this->config["iat"] + $this->config["timeout"],
+			"sub" => $this->config["sub"],
+			"nbf" => $this->config["nbf"],
+			"jti" => uniqid("", true),
+			"data" => $data
+		];
+		$payload64 = $this->base64urlEncode(json_encode($payload));
+		$jwt = $header64.".".$payload64;
+		$signature = $this->signature($jwt);
 		return $jwt.".".$signature;
 	}
 
-	public function decode () 
+	public function decode ($jwt = "") 
 	{
-		$jwt = explode('.', globals::server("HTTP_AUTHORIZATION"));
+		$jwt = explode('.', $jwt ? $jwt : globals::server("HTTP_AUTHORIZATION"));
 		if (count($jwt) != 3) {
 			return $this->render(1101);
 		}
 		list($header64, $payload64, $signature) = $jwt;
-		$header = json_decode(self::base64urlDecode($header64), true);
+		$header = json_decode($this->base64urlDecode($header64), true);
 		if (empty($header['alg'])) {
 			return $this->render(1102);
 		}
-		if (self::signature($header64.'.'.$payload64) !== $signature) {
+		if ($this->signature($header64.'.'.$payload64, $this->config) !== $signature) {
 			return $this->render(1103);
 		}
-		static::$payload = json_decode(self::base64urlDecode(static::$payload64), true);
+		$payload = json_decode($this->base64urlDecode($payload64), true);
 		$time = globals::server("REQUEST_TIME");
-		if ($this->config["checkNbf"] && static::$payload['nbf'] > $time) {
+		if ($this->config["checkNbf"] && $payload['nbf'] > $time) {
 			return $this->render(1104);
 		}
-		if ($this->config["checkExp"] && static::$payload['exp'] < $time) {
+		if ($this->config["checkExp"] && $payload['exp'] < $time) {
 			return $this->render(1105);
 		}
-		if ($this->config["checkAud"] && !in_array(globals::server("HTTP_HOST"), static::$payload["aud"])) {
+		if ($this->config["checkAud"] && !in_array(globals::server("HTTP_HOST"), $payload["aud"])) {
 			return $this->render(1106);
 		}
-		if ($this->config["checkIss"] && globals::server("REMOTE_ADDR") !== static::$payload["iss"]) {
+		if ($this->config["checkIss"] && !in_array(globals::server("REMOTE_ADDR"), $payload["iss"])) {
 			return $this->render(1107);
 		}
-		if ($this->config["checkSub"] && globals::server("HTTP_ORIGIN") !== static::$payload["sub"]) {
+		if ($this->config["checkSub"] && !in_array(globals::server("HTTP_ORIGIN"), $payload["sub"])) {
 			return $this->render(1108);
 		}
-		return $this->render(1109, true, static::$payload);
+		return $this->render(1109, true, $payload["data"]);
 	}
 }
-
-
 
